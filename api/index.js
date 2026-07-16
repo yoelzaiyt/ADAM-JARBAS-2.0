@@ -1,9 +1,4 @@
-// JARBAS 2.0 - Standalone Vercel Server
-// All-in-one deployment without monorepo dependencies
-
-import http from 'http';
-
-const PORT = process.env.PORT || 3000;
+// JARBAS 2.0 - Vercel Serverless Function
 
 // ============================================================
 // AI PROVIDERS - Real API Integrations
@@ -91,7 +86,6 @@ function selectProvider(preferred) {
   if (preferred && PROVIDERS[preferred] && PROVIDERS[preferred].apiKey) {
     return preferred;
   }
-  // Priority: hermes > deepseek > openrouter > nvidia > zhipuai
   for (const name of ['hermes', 'deepseek', 'openrouter', 'nvidia', 'zhipuai']) {
     if (PROVIDERS[name].apiKey) return name;
   }
@@ -99,21 +93,48 @@ function selectProvider(preferred) {
 }
 
 // ============================================================
-// REQUEST HANDLER
+// HELPERS
 // ============================================================
-async function handleRequest(req, res) {
-  // CORS
-  res.setHeader('Access-Control-Allow-Origin', '*');
-  res.setHeader('Access-Control-Allow-Methods', 'GET, POST, OPTIONS');
-  res.setHeader('Access-Control-Allow-Headers', 'Content-Type, Authorization');
+function sendJSON(res, status, data) {
+  res.writeHead(status, {
+    'Content-Type': 'application/json',
+    'Access-Control-Allow-Origin': '*',
+    'Access-Control-Allow-Methods': 'GET, POST, OPTIONS',
+    'Access-Control-Allow-Headers': 'Content-Type, Authorization',
+  });
+  res.end(JSON.stringify(data, null, 2));
+}
 
+function readBody(req) {
+  return new Promise((resolve, reject) => {
+    let body = '';
+    req.on('data', (chunk) => (body += chunk));
+    req.on('end', () => {
+      try {
+        resolve(JSON.parse(body));
+      } catch {
+        reject(new Error('Invalid JSON'));
+      }
+    });
+    req.on('error', reject);
+  });
+}
+
+// ============================================================
+// VERCEL SERVERLESS HANDLER
+// ============================================================
+export default async function handler(req, res) {
   if (req.method === 'OPTIONS') {
-    res.writeHead(204);
+    res.writeHead(204, {
+      'Access-Control-Allow-Origin': '*',
+      'Access-Control-Allow-Methods': 'GET, POST, OPTIONS',
+      'Access-Control-Allow-Headers': 'Content-Type, Authorization',
+    });
     res.end();
     return;
   }
 
-  const url = new URL(req.url, `http://localhost:${PORT}`);
+  const url = new URL(req.url, `http://localhost`);
   const path = url.pathname;
 
   try {
@@ -128,7 +149,7 @@ async function handleRequest(req, res) {
         version: '0.1.0',
         platform: 'JARBAS 2.0 - Hermes Platform',
         providers: activeProviders,
-        endpoints: ['/health', '/api/v1/chat', '/api/v1/providers', '/api/v1/embeddings'],
+        endpoints: ['/health', '/api/v1/chat', '/api/v1/providers'],
       });
       return;
     }
@@ -151,7 +172,7 @@ async function handleRequest(req, res) {
     // Chat completion
     if (path === '/api/v1/chat' && req.method === 'POST') {
       const body = await readBody(req);
-      const { messages, model, provider, temperature, maxTokens, stream } = body;
+      const { messages, model, provider, temperature, maxTokens } = body;
 
       if (!messages || !Array.isArray(messages)) {
         sendJSON(res, 400, { error: 'messages[] is required' });
@@ -159,56 +180,6 @@ async function handleRequest(req, res) {
       }
 
       const selectedProvider = selectProvider(provider);
-
-      if (stream) {
-        // SSE streaming
-        res.writeHead(200, {
-          'Content-Type': 'text/event-stream',
-          'Cache-Control': 'no-cache',
-          Connection: 'keep-alive',
-        });
-
-        const config = PROVIDERS[selectedProvider];
-        const response = await fetch(`${config.baseUrl}/chat/completions`, {
-          method: 'POST',
-          headers: {
-            'Content-Type': 'application/json',
-            Authorization: `Bearer ${config.apiKey}`,
-          },
-          body: JSON.stringify({
-            model: model || config.models[0],
-            messages,
-            temperature: temperature || 0.7,
-            max_tokens: maxTokens || 4096,
-            stream: true,
-          }),
-        });
-
-        const reader = response.body?.getReader();
-        const decoder = new TextDecoder();
-
-        if (reader) {
-          let buffer = '';
-          while (true) {
-            const { done, value } = await reader.read();
-            if (done) break;
-            buffer += decoder.decode(value, { stream: true });
-            const lines = buffer.split('\n');
-            buffer = lines.pop() || '';
-            for (const line of lines) {
-              if (line.startsWith('data: ')) {
-                res.write(line + '\n\n');
-              }
-            }
-          }
-        }
-
-        res.write('data: [DONE]\n\n');
-        res.end();
-        return;
-      }
-
-      // Non-streaming
       const result = await chatCompletion(
         selectedProvider,
         messages,
@@ -228,50 +199,3 @@ async function handleRequest(req, res) {
     sendJSON(res, 500, { error: error.message });
   }
 }
-
-// ============================================================
-// HELPERS
-// ============================================================
-function sendJSON(res, status, data) {
-  res.writeHead(status, { 'Content-Type': 'application/json' });
-  res.end(JSON.stringify(data, null, 2));
-}
-
-function readBody(req) {
-  return new Promise((resolve, reject) => {
-    let body = '';
-    req.on('data', (chunk) => (body += chunk));
-    req.on('end', () => {
-      try {
-        resolve(JSON.parse(body));
-      } catch {
-        reject(new Error('Invalid JSON'));
-      }
-    });
-    req.on('error', reject);
-  });
-}
-
-// ============================================================
-// START SERVER
-// ============================================================
-const server = http.createServer(handleRequest);
-
-server.listen(PORT, () => {
-  const activeProviders = Object.entries(PROVIDERS)
-    .filter(([_, c]) => c.apiKey)
-    .map(([name]) => name);
-
-  console.log(`
-╔══════════════════════════════════════════════════╗
-║        JARBAS 2.0 - Hermes Platform              ║
-║        AI Orchestration Server                    ║
-╠══════════════════════════════════════════════════╣
-║  Port:     ${String(PORT).padEnd(37)}║
-║  Providers: ${activeProviders.join(', ').padEnd(36)}║
-║  Endpoints: /health, /api/v1/chat, /providers    ║
-╚══════════════════════════════════════════════════╝
-  `);
-});
-
-export default server;
