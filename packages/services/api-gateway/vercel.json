@@ -1,0 +1,9 @@
+{
+  "buildCommand": "cd ../.. && pnpm install && pnpm build",
+  "installCommand": "cd ../.. && pnpm install",
+  "framework": null,
+  "outputDirectory": ".",
+  "env": {
+    "NODE_ENV": "production"
+  }
+}

@@ -1,0 +1,30 @@
+{
+  "name": "@jarbas/evolution-center",
+  "version": "1.0.0",
+  "description": "Centro de evolução contínua - análise, melhorias, roadmap, governança, releases, feature flags",
+  "type": "module",
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js"
+    }
+  },
+  "scripts": {
+    "build": "tsc",
+    "test": "vitest run",
+    "test:watch": "vitest",
+    "typecheck": "tsc --noEmit"
+  },
+  "dependencies": {
+    "@jarbas/hermes-core": "workspace:*",
+    "@jarbas/knowledge-hub": "workspace:*",
+    "@jarbas/types": "workspace:*",
+    "@jarbas/utils": "workspace:*"
+  },
+  "devDependencies": {
+    "typescript": "^5.5.0",
+    "vitest": "^3.2.1"
+  }
+}

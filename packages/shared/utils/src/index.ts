@@ -22,14 +22,13 @@ export function truncate(str: string, maxLen: number): string {
   return str.slice(0, maxLen - 3) + '...';
 }
 
-export function hashApiKey(key: string, salt: string): string {
+export async function hashApiKey(key: string, salt: string): Promise<string> {
   const encoder = new TextEncoder();
   const data = encoder.encode(key + salt);
-  return crypto.subtle.digest('SHA-256', data).then((buf) => {
-    return Array.from(new Uint8Array(buf))
-      .map((b) => b.toString(16).padStart(2, '0'))
-      .join('');
-  });
+  const buf = await crypto.subtle.digest('SHA-256', data);
+  return Array.from(new Uint8Array(buf))
+    .map((b) => b.toString(16).padStart(2, '0'))
+    .join('');
 }
 
 export function maskApiKey(key: string): string {

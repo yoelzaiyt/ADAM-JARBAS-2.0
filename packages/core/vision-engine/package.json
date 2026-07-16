@@ -1,0 +1,31 @@
+{
+  "name": "@jarbas/vision-engine",
+  "version": "1.0.0",
+  "description": "Vision AI Platform - Computer vision, OCR, document analysis, video processing",
+  "type": "module",
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js"
+    }
+  },
+  "scripts": {
+    "build": "tsc",
+    "typecheck": "tsc --noEmit",
+    "test": "node --experimental-vm-modules ../../node_modules/.bin/jest --passWithNoTests",
+    "test:watch": "node --experimental-vm-modules ../../node_modules/.bin/jest --watch"
+  },
+  "dependencies": {
+    "@jarbas/types": "workspace:*",
+    "@jarbas/utils": "workspace:*"
+  },
+  "devDependencies": {
+    "typescript": "^5.7.3",
+    "@types/node": "^22.15.3",
+    "jest": "^29.7.0",
+    "@jest/globals": "^29.7.0",
+    "ts-jest": "^29.2.5"
+  }
+}

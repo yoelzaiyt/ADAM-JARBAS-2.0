@@ -7,7 +7,7 @@ dotenv.config({ path: path.resolve(__dirname, '../../../.env') });
 
 function env(key: string, fallback?: string): string {
   const val = process.env[key] ?? fallback;
-  if (val === undefined) throw new Error(`Missing env var: ${key}`);
+  if (val === undefined || val === '') throw new Error(`Missing env var: ${key}`);
   return val;
 }
 
@@ -30,11 +30,12 @@ export const config = {
   },
 
   jwt: {
-    secret: env('JWT_SECRET', 'dev-secret-change-me'),
-    expiresIn: env('JWT_EXPIRES_IN', '7d'),
+    secret: env('JWT_SECRET'),
+    expiresIn: env('JWT_EXPIRES_IN', '15m'),
+    refreshExpiresIn: env('JWT_REFRESH_EXPIRES_IN', '7d'),
   },
 
-  apiKeySalt: env('API_KEY_SALT', 'dev-salt-change-me'),
+  apiKeySalt: env('API_KEY_SALT'),
 
   providers: {
     openrouter: {
@@ -92,7 +93,11 @@ export const config = {
   },
 
   supabase: {
-    url: env('SUPABASE_URL', 'https://ewajzxpqvlowslgsbnfl.supabase.co'),
-    anonKey: env('SUPABASE_ANON_KEY', 'sb_publishable_GNqxH4ykvegKnIZfyqiwJA_gc4vO6_8'),
+    url: env('SUPABASE_URL'),
+    anonKey: env('SUPABASE_ANON_KEY'),
+  },
+
+  cors: {
+    origins: env('CORS_ORIGINS', 'http://localhost:3000').split(','),
   },
 } as const;

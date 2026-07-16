@@ -1,6 +1,9 @@
 import type { User, AuthToken, UserRole } from '@jarbas/types';
 import { generateId } from '@jarbas/utils';
 import crypto from 'crypto';
+import bcrypt from 'bcrypt';
+
+const BCRYPT_ROUNDS = 12;
 
 export interface AuthServiceConfig {
   jwtSecret: string;
@@ -26,7 +29,7 @@ export class AuthService {
     if (existing) throw new Error('Email already registered');
 
     const id = generateId();
-    const passwordHash = this.hashPassword(password);
+    const passwordHash = await this.hashPassword(password);
 
     const user: User & { passwordHash: string } = {
       id,
@@ -46,7 +49,7 @@ export class AuthService {
     const user = Array.from(this.users.values()).find((u) => u.email === email);
     if (!user) throw new Error('Invalid credentials');
 
-    const valid = this.verifyPassword(password, user.passwordHash);
+    const valid = await this.verifyPassword(password, user.passwordHash);
     if (!valid) throw new Error('Invalid credentials');
 
     user.lastLoginAt = new Date();
@@ -86,26 +89,29 @@ export class AuthService {
   }
 
   private generateTokens(user: User): AuthToken {
+    const accessExpiresIn = 15 * 60; // 15 minutes
+    const refreshExpiresIn = 7 * 24 * 60 * 60; // 7 days
+
     const accessToken = this.signJWT({
       sub: user.id,
       email: user.email,
       tenantId: user.tenantId,
       role: user.role,
       iat: Math.floor(Date.now() / 1000),
-      exp: Math.floor(Date.now() / 1000) + 7 * 24 * 60 * 60,
+      exp: Math.floor(Date.now() / 1000) + accessExpiresIn,
     });
 
     const refreshToken = crypto.randomBytes(40).toString('hex');
     this.refreshTokens.set(refreshToken, {
       userId: user.id,
       tenantId: user.tenantId,
-      expiresAt: new Date(Date.now() + 30 * 24 * 60 * 60 * 1000),
+      expiresAt: new Date(Date.now() + refreshExpiresIn * 1000),
     });
 
     return {
       accessToken,
       refreshToken,
-      expiresIn: 7 * 24 * 60 * 60,
+      expiresIn: accessExpiresIn,
       tokenType: 'Bearer',
     };
   }
@@ -130,7 +136,11 @@ export class AuthService {
       .update(`${header}.${body}`)
       .digest('base64url');
 
-    if (signature !== expectedSig) throw new Error('Invalid token signature');
+    const sigBuf = Buffer.from(signature, 'base64url');
+    const expectedBuf = Buffer.from(expectedSig, 'base64url');
+    if (sigBuf.length !== expectedBuf.length || !crypto.timingSafeEqual(sigBuf, expectedBuf)) {
+      throw new Error('Invalid token signature');
+    }
 
     const payload: JWTPayload = JSON.parse(Buffer.from(body, 'base64url').toString());
     if (payload.exp < Math.floor(Date.now() / 1000)) throw new Error('Token expired');
@@ -138,11 +148,11 @@ export class AuthService {
     return payload;
   }
 
-  private hashPassword(password: string): string {
-    return crypto.createHash('sha256').update(password + this.config.apiKeySalt).digest('hex');
+  private async hashPassword(password: string): Promise<string> {
+    return bcrypt.hash(password, BCRYPT_ROUNDS);
   }
 
-  private verifyPassword(password: string, hash: string): boolean {
-    return this.hashPassword(password) === hash;
+  private async verifyPassword(password: string, hash: string): Promise<boolean> {
+    return bcrypt.compare(password, hash);
   }
 }

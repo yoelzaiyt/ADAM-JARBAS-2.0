@@ -1,5 +1,7 @@
 import express, { type Request, type Response, type NextFunction } from 'express';
 import cors from 'cors';
+import helmet from 'helmet';
+import rateLimit from 'express-rate-limit';
 import { config } from '@jarbas/config';
 import { createRegistry, type RegistryConfig } from '@jarbas/ai-registry';
 import { HermesRouter } from '@jarbas/hermes-router';
@@ -13,8 +15,37 @@ import { AnalyticsEngine } from '@jarbas/analytics-engine';
 import { SupabaseClient } from '@jarbas/supabase-client';
 
 const app = express();
-app.use(cors());
-app.use(express.json({ limit: '10mb' }));
+
+// --- Security Headers ---
+app.use(helmet());
+
+// --- CORS ---
+app.use(cors({
+  origin: config.cors.origins,
+  credentials: true,
+  methods: ['GET', 'POST', 'PUT', 'DELETE', 'PATCH'],
+  allowedHeaders: ['Content-Type', 'Authorization'],
+}));
+
+// --- Rate Limiting ---
+const globalLimiter = rateLimit({
+  windowMs: config.rateLimit.windowMs,
+  max: config.rateLimit.maxRequests,
+  standardHeaders: true,
+  legacyHeaders: false,
+  message: { error: 'Too many requests, please try again later' },
+});
+app.use(globalLimiter);
+
+const authLimiter = rateLimit({
+  windowMs: 60 * 1000,
+  max: 5,
+  standardHeaders: true,
+  legacyHeaders: false,
+  message: { error: 'Too many authentication attempts, please try again later' },
+});
+
+app.use(express.json({ limit: '1mb' }));
 
 // --- Initialize Services ---
 const registryConfig: RegistryConfig = {
@@ -109,8 +140,8 @@ app.get('/api/v1/providers/health', async (_req, res) => {
   }
 });
 
-// --- Auth ---
-app.post('/api/v1/auth/register', async (req, res) => {
+// --- Auth (stricter rate limit) ---
+app.post('/api/v1/auth/register', authLimiter, async (req, res) => {
   try {
     const { email, password, name, tenantId } = req.body;
     const tokens = await authService.register(email, password, name, tenantId ?? 'default');
@@ -129,7 +160,7 @@ app.post('/api/v1/auth/register', async (req, res) => {
   }
 });
 
-app.post('/api/v1/auth/login', async (req, res) => {
+app.post('/api/v1/auth/login', authLimiter, async (req, res) => {
   try {
     const { email, password } = req.body;
     const tokens = await authService.login(email, password);
@@ -632,6 +663,7 @@ app.listen(PORT, () => {
   console.log(`[API Gateway] Running on port ${PORT}`);
   console.log(`[API Gateway] Providers: ${registry.getAvailableProviders().join(', ')}`);
   console.log(`[API Gateway] Router: cost-optimized | Auth: JWT + API Key`);
+  console.log(`[API Gateway] Security: helmet + rate-limit + CORS restricted`);
   console.log(`[API Gateway] Endpoints: /chat, /embeddings, /rerank, /skills, /agents, /prompts, /costs, /analytics, /memory, /supabase`);
 });
 

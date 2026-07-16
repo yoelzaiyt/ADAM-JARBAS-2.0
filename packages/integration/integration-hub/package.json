@@ -1,0 +1,29 @@
+{
+  "name": "@jarbas/integration-hub",
+  "version": "1.0.0",
+  "description": "Integration Hub - Catalog, orchestration and intelligence for 1,588+ public APIs across 51 categories",
+  "type": "module",
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js"
+    }
+  },
+  "scripts": {
+    "build": "tsc",
+    "test": "vitest run",
+    "test:watch": "vitest",
+    "typecheck": "tsc --noEmit"
+  },
+  "dependencies": {
+    "@jarbas/hermes-core": "workspace:*",
+    "@jarbas/types": "workspace:*",
+    "@jarbas/utils": "workspace:*"
+  },
+  "devDependencies": {
+    "typescript": "^5.5.0",
+    "vitest": "^3.2.1"
+  }
+}

@@ -1,6 +1,6 @@
 {
   "name": "@jarbas/auth-service",
-  "version": "0.1.0",
+  "version": "1.0.0",
   "private": true,
   "type": "module",
   "main": "./dist/index.js",
@@ -11,9 +11,12 @@
   },
   "dependencies": {
     "@jarbas/types": "workspace:*",
-    "@jarbas/utils": "workspace:*"
+    "@jarbas/utils": "workspace:*",
+    "bcrypt": "^5.1.1"
   },
   "devDependencies": {
+    "@types/bcrypt": "^5.0.2",
     "typescript": "^5.4.0"
   }
 }
+

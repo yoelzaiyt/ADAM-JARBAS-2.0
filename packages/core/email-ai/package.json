@@ -1,0 +1,32 @@
+{
+  "name": "@jarbas/email-ai",
+  "version": "1.0.0",
+  "description": "Intelligent email management platform for JARBAS 2.0",
+  "type": "module",
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js"
+    }
+  },
+  "scripts": {
+    "build": "tsc",
+    "dev": "tsc --watch",
+    "test": "vitest run",
+    "test:watch": "vitest",
+    "typecheck": "tsc --noEmit"
+  },
+  "dependencies": {
+    "@jarbas/hermes-core": "workspace:*",
+    "@jarbas/knowledge-hub": "workspace:*",
+    "@jarbas/meeting-ai": "workspace:*",
+    "@jarbas/types": "workspace:*",
+    "@jarbas/utils": "workspace:*"
+  },
+  "devDependencies": {
+    "typescript": "^5.8.3",
+    "vitest": "^3.2.1"
+  }
+}
