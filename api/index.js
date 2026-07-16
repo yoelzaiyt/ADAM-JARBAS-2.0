@@ -121,6 +121,25 @@ function readBody(req) {
 }
 
 // ============================================================
+// AUTH - Simple in-memory user store (serverless)
+// ============================================================
+const users = new Map();
+
+function generateToken() {
+  return 'jwt_' + crypto.randomUUID().replace(/-/g, '');
+}
+
+function hashPassword(pw) {
+  let hash = 0;
+  for (let i = 0; i < pw.length; i++) {
+    const char = pw.charCodeAt(i);
+    hash = ((hash << 5) - hash) + char;
+    hash |= 0;
+  }
+  return 'h_' + Math.abs(hash).toString(36);
+}
+
+// ============================================================
 // VERCEL SERVERLESS HANDLER
 // ============================================================
 export default async function handler(req, res) {
@@ -149,8 +168,46 @@ export default async function handler(req, res) {
         version: '0.1.0',
         platform: 'JARBAS 2.0 - Hermes Platform',
         providers: activeProviders,
-        endpoints: ['/health', '/api/v1/chat', '/api/v1/providers'],
+        endpoints: ['/health', '/api/v1/chat', '/api/v1/providers', '/api/v1/auth/login', '/api/v1/auth/register'],
       });
+      return;
+    }
+
+    // Auth - Register
+    if (path === '/api/v1/auth/register' && req.method === 'POST') {
+      const body = await readBody(req);
+      const { email, password, name, tenantId } = body;
+      if (!email || !password) {
+        sendJSON(res, 400, { error: 'Email and password required' });
+        return;
+      }
+      if (users.has(email)) {
+        sendJSON(res, 409, { error: 'User already exists' });
+        return;
+      }
+      const user = { id: crypto.randomUUID(), email, name: name || email.split('@')[0], tenantId: tenantId || 'default' };
+      users.set(email, { ...user, passwordHash: hashPassword(password) });
+      const token = generateToken();
+      sendJSON(res, 200, { user, token: { accessToken: token, expiresIn: '7d' } });
+      return;
+    }
+
+    // Auth - Login
+    if (path === '/api/v1/auth/login' && req.method === 'POST') {
+      const body = await readBody(req);
+      const { email, password } = body;
+      if (!email || !password) {
+        sendJSON(res, 400, { error: 'Email and password required' });
+        return;
+      }
+      const stored = users.get(email);
+      if (!stored || stored.passwordHash !== hashPassword(password)) {
+        sendJSON(res, 401, { error: 'Invalid credentials' });
+        return;
+      }
+      const { passwordHash, ...user } = stored;
+      const token = generateToken();
+      sendJSON(res, 200, { user, token: { accessToken: token, expiresIn: '7d' } });
       return;
     }
 
