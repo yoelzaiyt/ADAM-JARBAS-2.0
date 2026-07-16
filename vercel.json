@@ -14,7 +14,12 @@
       "dest": "/api/index.js"
     },
     {
-      "handle": "filesystem"
+      "src": "/assets/(.*)",
+      "dest": "/assets/$1"
+    },
+    {
+      "src": "/(favicon\\.svg|icon-.*\\.svg|manifest\\.webmanifest|sw\\.js|workbox-.*)",
+      "dest": "/$1"
     },
     {
       "src": "/(.*)",
