@@ -1,5 +1,13 @@
 {
   "version": 2,
+  "installCommand": "echo 'skip'",
+  "buildCommand": "echo 'skip'",
+  "builds": [
+    {
+      "src": "api/index.js",
+      "use": "@vercel/node"
+    }
+  ],
   "routes": [
     {
       "src": "/(.*)",
