@@ -1,9 +1,10 @@
 import type { ChatMessage } from '../types';
-import { Bot, User, Copy, Check } from 'lucide-react';
+import { User, Copy, Check } from 'lucide-react';
 import { useState, useMemo } from 'react';
 import ReactMarkdown from 'react-markdown';
 import { Prism as SyntaxHighlighter } from 'react-syntax-highlighter';
 import { oneDark } from 'react-syntax-highlighter/dist/esm/styles/prism';
+import { StarAvatar } from './StarAvatar';
 
 export function MessageBubble({ message }: { message: ChatMessage }) {
   const isUser = message.role === 'user';
@@ -24,14 +25,13 @@ export function MessageBubble({ message }: { message: ChatMessage }) {
 
   return (
     <div className={`flex gap-3 ${isUser ? 'flex-row-reverse' : ''}`}>
-      <div className={`
-        shrink-0 w-8 h-8 rounded-xl flex items-center justify-center
-        ${isUser
-          ? 'bg-jarbas-600'
-          : 'bg-gradient-to-br from-jarbas-500/30 to-purple-600/30 border border-jarbas-500/20'}
-      `}>
-        {isUser ? <User size={16} /> : <Bot size={16} className="text-jarbas-400" />}
-      </div>
+      {isUser ? (
+        <div className="shrink-0 w-8 h-8 rounded-xl flex items-center justify-center bg-jarbas-600">
+          <User size={16} />
+        </div>
+      ) : (
+        <StarAvatar state={message.isStreaming ? 'responding' : 'idle'} size={32} className="mt-0.5" />
+      )}
 
       <div className={`flex-1 min-w-0 ${isUser ? 'flex flex-col items-end' : ''}`}>
         <div className={`

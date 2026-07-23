@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState, useCallback } from 'react';
 import { X, Mic, AudioLines } from 'lucide-react';
 import { useChatStore } from '../store/chatStore';
+import { StarAvatar, type StarState } from '../components/StarAvatar';
 
 interface VoiceModePageProps {
   onClose: () => void;
@@ -121,6 +122,14 @@ export function VoiceModePage({ onClose }: VoiceModePageProps) {
     };
   }, []);
 
+  const starState: Record<VoiceState, StarState> = {
+    idle: 'idle',
+    listening: 'listening',
+    thinking: 'thinking',
+    speaking: 'responding',
+    unsupported: 'offline',
+  };
+
   const orbLabel: Record<VoiceState, string> = {
     idle: 'Toque no microfone para falar',
     listening: 'Ouvindo...',
@@ -139,16 +148,7 @@ export function VoiceModePage({ onClose }: VoiceModePageProps) {
       </header>
 
       <div className="flex-1 flex flex-col items-center justify-center gap-6 px-6">
-        <div
-          className={`
-            w-56 h-56 rounded-full transition-all duration-500 ease-out
-            bg-[radial-gradient(circle_at_35%_30%,#e0e7ff_0%,#818cf8_35%,#4f46e5_65%,#1e1b4b_100%)]
-            ${voiceState === 'listening' ? 'scale-110 shadow-[0_0_80px_20px_rgba(99,102,241,0.55)]' : ''}
-            ${voiceState === 'speaking' ? 'animate-pulse-slow shadow-[0_0_100px_30px_rgba(129,140,248,0.6)]' : ''}
-            ${voiceState === 'thinking' ? 'scale-95 opacity-80' : ''}
-            ${voiceState === 'idle' ? 'shadow-[0_0_50px_10px_rgba(99,102,241,0.35)]' : ''}
-          `}
-        />
+        <StarAvatar state={starState[voiceState]} size={224} />
         <p className="text-dark-300 text-sm text-center max-w-xs">{orbLabel[voiceState]}</p>
         {transcript && voiceState !== 'unsupported' && (
           <p className="text-white text-center text-base max-w-sm px-4">{transcript}</p>

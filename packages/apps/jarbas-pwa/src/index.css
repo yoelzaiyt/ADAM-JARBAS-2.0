@@ -8,6 +8,19 @@
     --safe-area-bottom: env(safe-area-inset-bottom, 0px);
     --safe-area-left: env(safe-area-inset-left, 0px);
     --safe-area-right: env(safe-area-inset-right, 0px);
+
+    /* Tema de cor do Jarbas (ATHOS Blue por padrão) - sobrescrito em runtime pelo identityStore */
+    --jarbas-50: 238 242 255;
+    --jarbas-100: 224 231 255;
+    --jarbas-200: 199 210 254;
+    --jarbas-300: 165 180 252;
+    --jarbas-400: 129 140 248;
+    --jarbas-500: 99 102 241;
+    --jarbas-600: 79 70 229;
+    --jarbas-700: 67 56 202;
+    --jarbas-800: 55 48 163;
+    --jarbas-900: 49 46 129;
+    --jarbas-950: 30 27 75;
   }
 
   * {
@@ -86,6 +99,6 @@
 
 @layer utilities {
   .text-gradient {
-    @apply bg-clip-text text-transparent bg-gradient-to-r from-jarbas-400 to-purple-400;
+    @apply bg-clip-text text-transparent bg-gradient-to-r from-jarbas-400 to-jarbas-600;
   }
 }

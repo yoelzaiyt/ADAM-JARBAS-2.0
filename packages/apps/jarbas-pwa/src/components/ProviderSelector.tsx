@@ -1,5 +1,5 @@
 import type { AIProviderName } from '../types';
-import { X, Check, Cpu, Zap, Globe, Server, Brain } from 'lucide-react';
+import { X, Check, Cpu, Zap, Globe, Brain } from 'lucide-react';
 
 interface ProviderSelectorProps {
   selectedProvider: AIProviderName;
@@ -40,13 +40,6 @@ const PROVIDERS: { name: AIProviderName; label: string; icon: typeof Cpu; color:
       'nvidia/llama-3.3-70b-instruct',
       'meta/llama-3.1-405b-instruct',
     ],
-  },
-  {
-    name: 'ollama',
-    label: 'Ollama (Local)',
-    icon: Server,
-    color: 'from-orange-500 to-amber-500',
-    models: ['llama3.2', 'llama3.1', 'mistral', 'codellama', 'phi3'],
   },
   {
     name: 'hermes',

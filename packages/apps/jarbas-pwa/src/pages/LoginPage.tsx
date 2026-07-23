@@ -1,6 +1,8 @@
 import { useState } from 'react';
 import { useAuthStore } from '../store/authStore';
-import { Eye, EyeOff, Loader2, Bot, ArrowRight } from 'lucide-react';
+import { useIdentityStore } from '../store/identityStore';
+import { StarAvatar } from '../components/StarAvatar';
+import { Eye, EyeOff, Loader2, ArrowRight } from 'lucide-react';
 
 export function LoginPage() {
   const [isRegister, setIsRegister] = useState(false);
@@ -11,6 +13,7 @@ export function LoginPage() {
   const [showPassword, setShowPassword] = useState(false);
   const [localError, setLocalError] = useState('');
   const { login, register, isLoading, error, clearError } = useAuthStore();
+  const { assistantName } = useIdentityStore();
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -29,10 +32,10 @@ export function LoginPage() {
     <div className="min-h-screen min-h-[100dvh] flex flex-col items-center justify-center p-6 bg-gradient-to-b from-dark-950 via-dark-900 to-dark-950">
       <div className="w-full max-w-sm">
         <div className="text-center mb-10">
-          <div className="w-20 h-20 mx-auto mb-6 rounded-2xl bg-gradient-to-br from-jarbas-500 to-purple-600 flex items-center justify-center shadow-lg shadow-jarbas-500/30 animate-glow">
-            <Bot size={40} className="text-white" />
+          <div className="mx-auto mb-6 flex items-center justify-center">
+            <StarAvatar state="idle" size={88} />
           </div>
-          <h1 className="text-3xl font-bold text-gradient">JARBAS</h1>
+          <h1 className="text-3xl font-bold text-gradient uppercase">{assistantName}</h1>
           <p className="text-dark-400 mt-2 text-sm">AI Orchestration Platform</p>
         </div>
 

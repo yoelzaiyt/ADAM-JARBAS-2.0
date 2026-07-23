@@ -1,4 +1,5 @@
 // JARBAS 2.0 - Vercel Serverless Function
+import crypto from 'node:crypto';
 
 // ============================================================
 // AI PROVIDERS - Real API Integrations
@@ -176,8 +177,55 @@ function readBody(req) {
 // ============================================================
 const users = new Map();
 
-function generateToken() {
-  return 'jwt_' + crypto.randomUUID().replace(/-/g, '');
+// ------------------------------------------------------------
+// Stateless signed tokens (HMAC-SHA256). Verifiable across cold
+// starts without needing the in-memory `users` Map, since that
+// Map is wiped whenever the serverless instance recycles.
+// ------------------------------------------------------------
+const JWT_SECRET = process.env.JWT_SECRET || 'dev-secret-change-me';
+
+function base64url(input) {
+  return Buffer.from(input).toString('base64').replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '');
+}
+
+function base64urlDecode(input) {
+  const padded = input.replace(/-/g, '+').replace(/_/g, '/');
+  return Buffer.from(padded, 'base64').toString('utf8');
+}
+
+function generateToken(payload) {
+  const header = base64url(JSON.stringify({ alg: 'HS256', typ: 'JWT' }));
+  const body = base64url(JSON.stringify({ ...payload, iat: Date.now() }));
+  const signature = crypto.createHmac('sha256', JWT_SECRET).update(`${header}.${body}`).digest('base64url');
+  return `${header}.${body}.${signature}`;
+}
+
+function verifyToken(token) {
+  if (!token) return null;
+  const parts = token.split('.');
+  if (parts.length !== 3) return null;
+  const [header, body, signature] = parts;
+  const expected = crypto.createHmac('sha256', JWT_SECRET).update(`${header}.${body}`).digest('base64url');
+  const a = Buffer.from(signature);
+  const b = Buffer.from(expected);
+  if (a.length !== b.length || !crypto.timingSafeEqual(a, b)) return null;
+  try {
+    return JSON.parse(base64urlDecode(body));
+  } catch {
+    return null;
+  }
+}
+
+function requireAuth(req) {
+  const header = req.headers['authorization'] || '';
+  const token = header.startsWith('Bearer ') ? header.slice(7) : null;
+  const payload = verifyToken(token);
+  if (!payload) {
+    const err = new Error('Não autenticado');
+    err.statusCode = 401;
+    throw err;
+  }
+  return payload;
 }
 
 function hashPassword(pw) {
@@ -241,7 +289,7 @@ export default async function handler(req, res) {
       }
       const user = { id: crypto.randomUUID(), email, name: name || email.split('@')[0], tenantId: tenantId || 'default' };
       users.set(email, { ...user, passwordHash: hashPassword(password) });
-      const token = generateToken();
+      const token = generateToken({ sub: user.id, email: user.email });
       sendJSON(res, 200, { user, token: { accessToken: token, expiresIn: '7d' } });
       return;
     }
@@ -260,7 +308,7 @@ export default async function handler(req, res) {
         return;
       }
       const { passwordHash, ...user } = stored;
-      const token = generateToken();
+      const token = generateToken({ sub: user.id, email: user.email });
       sendJSON(res, 200, { user, token: { accessToken: token, expiresIn: '7d' } });
       return;
     }
@@ -282,6 +330,7 @@ export default async function handler(req, res) {
 
     // Chat completion
     if (path === '/api/v1/chat' && req.method === 'POST') {
+      requireAuth(req);
       const body = await readBody(req);
       const { messages, model, provider, temperature, maxTokens } = body;
 
@@ -305,6 +354,7 @@ export default async function handler(req, res) {
 
     // Image generation
     if (path === '/api/v1/images/generate' && req.method === 'POST') {
+      requireAuth(req);
       const body = await readBody(req);
       const { prompt, model, referenceImages } = body;
 
@@ -322,6 +372,6 @@ export default async function handler(req, res) {
     sendJSON(res, 404, { error: 'Not found', path });
   } catch (error) {
     console.error('[Error]', error.message);
-    sendJSON(res, 500, { error: error.message });
+    sendJSON(res, error.statusCode || 500, { error: error.message });
   }
 }

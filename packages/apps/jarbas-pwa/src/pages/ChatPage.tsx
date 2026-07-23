@@ -5,7 +5,7 @@ import { useAutoScroll } from '../hooks/useUI';
 import type { Conversation, Project } from '../types';
 import {
   Send, Plus, Settings, LogOut, Trash2, Menu, X, Bot,
-  Sparkles, MessageSquare, Cpu, Loader2, Mic,
+  MessageSquare, Cpu, Loader2, Mic,
   Folder, FolderPlus, ChevronRight, ChevronDown, Library, Code2, Puzzle, Image as ImageIcon,
 } from 'lucide-react';
 import { ProviderSelector } from '../components/ProviderSelector';
@@ -14,7 +14,10 @@ import { VoiceModePage } from './VoiceModePage';
 import { LibraryPage } from './LibraryPage';
 import { PluginsPage } from './PluginsPage';
 import { ImagesPage } from './ImagesPage';
+import { IdentityPage } from './IdentityPage';
 import { useAgentsStore } from '../store/agentsStore';
+import { useIdentityStore } from '../store/identityStore';
+import { StarAvatar } from '../components/StarAvatar';
 
 interface ConversationItemProps {
   conv: Conversation;
@@ -78,6 +81,7 @@ export function ChatPage() {
   const [showLibrary, setShowLibrary] = useState(false);
   const [showPlugins, setShowPlugins] = useState(false);
   const [showImages, setShowImages] = useState(false);
+  const [showIdentity, setShowIdentity] = useState(false);
   const [expandedProjects, setExpandedProjects] = useState<Record<string, boolean>>({});
   const [showNewProject, setShowNewProject] = useState(false);
   const [newProjectName, setNewProjectName] = useState('');
@@ -90,6 +94,7 @@ export function ChatPage() {
     createProject, setConversationProject,
   } = useChatStore();
   const { getAgent } = useAgentsStore();
+  const { assistantName } = useIdentityStore();
 
   const messages = getActiveMessages();
   const { ref: scrollRef, onScroll } = useAutoScroll(messages);
@@ -148,10 +153,8 @@ export function ChatPage() {
         <div className="p-4 border-b border-dark-700/50">
           <div className="flex items-center justify-between">
             <div className="flex items-center gap-2">
-              <div className="w-8 h-8 rounded-lg bg-gradient-to-br from-jarbas-500 to-purple-600 flex items-center justify-center">
-                <Bot size={18} className="text-white" />
-              </div>
-              <span className="font-bold text-gradient text-lg">JARBAS</span>
+              <StarAvatar state="idle" size={32} />
+              <span className="font-bold text-gradient text-lg uppercase">{assistantName}</span>
             </div>
             <button onClick={() => setShowSidebar(false)} className="md:hidden p-1 btn-ghost">
               <X size={20} />
@@ -207,7 +210,7 @@ export function ChatPage() {
             <Library size={16} /> Biblioteca
           </button>
           <button
-            onClick={() => { createConversation({ provider: 'opencode', mode: 'codex' }); setShowSidebar(false); }}
+            onClick={() => { createConversation({ mode: 'codex' }); setShowSidebar(false); }}
             className="w-full flex items-center gap-2.5 p-2.5 rounded-xl text-dark-300 hover:bg-dark-800 hover:text-white transition-all text-sm"
           >
             <Code2 size={16} /> Codex
@@ -300,6 +303,12 @@ export function ChatPage() {
             <Settings size={16} /> Configurações
           </button>
           <button
+            onClick={() => { setShowIdentity(true); setShowSidebar(false); }}
+            className="w-full btn-ghost text-sm py-2.5 flex items-center gap-2 px-3"
+          >
+            <StarAvatar state="idle" size={16} /> Identidade
+          </button>
+          <button
             onClick={logout}
             className="w-full btn-ghost text-sm py-2.5 flex items-center gap-2 px-3 text-red-400 hover:text-red-300 hover:bg-red-500/10"
           >
@@ -322,7 +331,7 @@ export function ChatPage() {
             <p className="text-xs text-dark-400 flex items-center gap-1">
               <Cpu size={12} />
               {activeConv?.mode === 'codex'
-                ? 'Codex · opencode'
+                ? `Codex · ${activeConv.provider}`
                 : activeAgent
                   ? `${activeAgent.name} · skill`
                   : `${selectedProvider} / ${selectedModel.split('/').pop()}`}
@@ -351,12 +360,12 @@ export function ChatPage() {
         >
           {!activeConversation || messages.length === 0 ? (
             <div className="h-full flex flex-col items-center justify-center p-6 text-center">
-              <div className="w-24 h-24 rounded-3xl bg-gradient-to-br from-jarbas-500/20 to-purple-600/20 flex items-center justify-center mb-6 border border-jarbas-500/20">
-                <Sparkles size={40} className="text-jarbas-400" />
+              <div className="mb-6">
+                <StarAvatar state="idle" size={80} />
               </div>
               <h2 className="text-xl font-bold text-gradient mb-2">Olá! 👋</h2>
               <p className="text-dark-400 max-w-xs text-sm">
-                Sou o JARBAS, seu assistente de IA. Como posso ajudar hoje?
+                Sou o {assistantName}, seu assistente de IA. Como posso ajudar hoje?
               </p>
               <div className="grid grid-cols-2 gap-2 mt-8 max-w-sm w-full">
                 {[
@@ -447,6 +456,7 @@ export function ChatPage() {
         />
       )}
       {showImages && <ImagesPage onClose={() => setShowImages(false)} />}
+      {showIdentity && <IdentityPage onClose={() => setShowIdentity(false)} />}
     </div>
   );
 }
