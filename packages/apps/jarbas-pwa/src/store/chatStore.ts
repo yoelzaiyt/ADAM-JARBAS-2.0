@@ -2,16 +2,20 @@ import { create } from 'zustand';
 import type { ChatMessage, Conversation, AIProviderName, Project } from '../types';
 import { api } from '../services/api';
 import { useAgentsStore } from './agentsStore';
+import { useAuthStore } from './authStore';
+import { supabase } from '../services/supabaseClient';
 
 interface ChatState {
   conversations: Conversation[];
   projects: Project[];
   activeConversation: string | null;
   isLoading: boolean;
+  isHydrated: boolean;
   streamingMessageId: string | null;
   selectedProvider: AIProviderName;
   selectedModel: string;
 
+  hydrate: () => Promise<void>;
   createConversation: (overrides?: { provider?: AIProviderName; mode?: 'chat' | 'codex'; agentId?: string; title?: string }) => string;
   setActiveConversation: (id: string | null) => void;
   deleteConversation: (id: string) => void;
@@ -24,7 +28,7 @@ interface ChatState {
 }
 
 function generateId(): string {
-  return Date.now().toString(36) + Math.random().toString(36).slice(2);
+  return crypto.randomUUID();
 }
 
 function generateTitle(content: string): string {
@@ -45,47 +49,96 @@ const CODEX_SYSTEM_PROMPT = 'Você é o Jarbas em modo Codex: um assistente de p
   'Priorize respostas técnicas e diretas, com blocos de código completos e corretos. ' +
   'Explique decisões de arquitetura quando relevante, aponte edge cases e não invente APIs que não existem.';
 
-const CONVERSATIONS_KEY = 'jarbas_conversations';
-const PROJECTS_KEY = 'jarbas_projects';
-
-function loadConversations(): Conversation[] {
-  try {
-    const raw = localStorage.getItem(CONVERSATIONS_KEY);
-    return raw ? JSON.parse(raw) : [];
-  } catch {
-    return [];
-  }
+function currentUserId(): string | null {
+  return useAuthStore.getState().user?.id ?? null;
 }
 
-function saveConversations(convs: Conversation[]) {
-  try {
-    localStorage.setItem(CONVERSATIONS_KEY, JSON.stringify(convs.slice(0, 50)));
-  } catch { /* quota exceeded */ }
+async function persistNewConversation(conv: Conversation, userId: string) {
+  const { error } = await supabase.from('conversations').insert({
+    id: conv.id,
+    user_id: userId,
+    project_id: conv.projectId ?? null,
+    title: conv.title,
+    provider: conv.provider,
+    mode: conv.mode,
+    agent_id: conv.agentId ?? null,
+  });
+  if (error) console.error('[supabase] falha ao criar conversa:', error.message);
 }
 
-function loadProjects(): Project[] {
-  try {
-    const raw = localStorage.getItem(PROJECTS_KEY);
-    return raw ? JSON.parse(raw) : [];
-  } catch {
-    return [];
-  }
+async function persistConversationUpdate(id: string, updates: Record<string, unknown>) {
+  const { error } = await supabase.from('conversations').update(updates).eq('id', id);
+  if (error) console.error('[supabase] falha ao atualizar conversa:', error.message);
 }
 
-function saveProjects(projects: Project[]) {
-  try {
-    localStorage.setItem(PROJECTS_KEY, JSON.stringify(projects));
-  } catch { /* quota exceeded */ }
+async function persistMessage(msg: ChatMessage, conversationId: string, userId: string) {
+  const { error } = await supabase.from('messages').insert({
+    id: msg.id,
+    conversation_id: conversationId,
+    user_id: userId,
+    role: msg.role,
+    content: msg.content,
+    provider: msg.provider ?? null,
+    model: msg.model ?? null,
+  });
+  if (error) console.error('[supabase] falha ao salvar mensagem:', error.message);
 }
 
 export const useChatStore = create<ChatState>((set, get) => ({
-  conversations: loadConversations(),
-  projects: loadProjects(),
+  conversations: [],
+  projects: [],
   activeConversation: null,
   isLoading: false,
+  isHydrated: false,
   streamingMessageId: null,
   selectedProvider: 'deepseek',
   selectedModel: DEFAULT_MODELS.deepseek,
+
+  hydrate: async () => {
+    const userId = currentUserId();
+    if (!userId) return;
+
+    const [{ data: projectRows }, { data: convRows }, { data: msgRows }] = await Promise.all([
+      supabase.from('projects').select('*').eq('user_id', userId).order('created_at', { ascending: true }),
+      supabase.from('conversations').select('*').eq('user_id', userId).order('updated_at', { ascending: false }),
+      supabase.from('messages').select('*').eq('user_id', userId).order('created_at', { ascending: true }),
+    ]);
+
+    const messagesByConv = new Map<string, ChatMessage[]>();
+    for (const m of msgRows || []) {
+      const msg: ChatMessage = {
+        id: m.id,
+        role: m.role,
+        content: m.content,
+        timestamp: new Date(m.created_at).getTime(),
+        provider: m.provider ?? undefined,
+        model: m.model ?? undefined,
+      };
+      const list = messagesByConv.get(m.conversation_id) ?? [];
+      list.push(msg);
+      messagesByConv.set(m.conversation_id, list);
+    }
+
+    const conversations: Conversation[] = (convRows || []).map(c => ({
+      id: c.id,
+      title: c.title,
+      messages: messagesByConv.get(c.id) ?? [],
+      createdAt: new Date(c.created_at).getTime(),
+      updatedAt: new Date(c.updated_at).getTime(),
+      agentId: c.agent_id ?? undefined,
+      provider: c.provider ?? undefined,
+      projectId: c.project_id ?? null,
+      mode: (c.mode as 'chat' | 'codex') ?? 'chat',
+    }));
+
+    const projects: Project[] = (projectRows || []).map(p => ({
+      id: p.id,
+      name: p.name,
+      createdAt: new Date(p.created_at).getTime(),
+    }));
+
+    set({ conversations, projects, isHydrated: true });
+  },
 
   createConversation: (overrides) => {
     const id = generateId();
@@ -106,7 +159,9 @@ export const useChatStore = create<ChatState>((set, get) => ({
     };
     const updated = [conv, ...get().conversations];
     set({ conversations: updated, activeConversation: id });
-    saveConversations(updated);
+
+    const userId = currentUserId();
+    if (userId) persistNewConversation(conv, userId);
     return id;
   },
 
@@ -118,7 +173,9 @@ export const useChatStore = create<ChatState>((set, get) => ({
       conversations: updated,
       activeConversation: get().activeConversation === id ? null : get().activeConversation,
     });
-    saveConversations(updated);
+    supabase.from('conversations').delete().eq('id', id).then(({ error }) => {
+      if (error) console.error('[supabase] falha ao excluir conversa:', error.message);
+    });
   },
 
   setProvider: (provider, model) => set({ selectedProvider: provider, selectedModel: model || DEFAULT_MODELS[provider] }),
@@ -137,6 +194,7 @@ export const useChatStore = create<ChatState>((set, get) => ({
       convId = get().createConversation();
     }
 
+    const userId = currentUserId();
     const existingConv = get().conversations.find(c => c.id === convId);
     const activeProvider = existingConv?.provider ?? state.selectedProvider;
     const activeModel = activeProvider === state.selectedProvider ? state.selectedModel : DEFAULT_MODELS[activeProvider];
@@ -160,6 +218,8 @@ export const useChatStore = create<ChatState>((set, get) => ({
       isStreaming: true,
     };
 
+    const isFirstMessage = (existingConv?.messages.length ?? 0) === 0;
+
     const updateConvMessages = (updater: (msgs: ChatMessage[]) => ChatMessage[]) => {
       const convs = get().conversations.map(c => {
         if (c.id !== convId) return c;
@@ -172,11 +232,17 @@ export const useChatStore = create<ChatState>((set, get) => ({
         };
       });
       set({ conversations: convs });
-      saveConversations(convs);
     };
 
     updateConvMessages(msgs => [...msgs, userMsg, assistantMsg]);
     set({ isLoading: true, streamingMessageId: assistantMsgId });
+
+    if (userId) {
+      persistMessage(userMsg, convId, userId);
+      if (isFirstMessage) {
+        persistConversationUpdate(convId, { title: generateTitle(content), updated_at: new Date().toISOString() });
+      }
+    }
 
     const conv = get().conversations.find(c => c.id === convId);
     const apiMessages = (conv?.messages || [])
@@ -189,6 +255,15 @@ export const useChatStore = create<ChatState>((set, get) => ({
       const agent = useAgentsStore.getState().getAgent(existingConv.agentId);
       if (agent) apiMessages.unshift({ role: 'system', content: agent.systemPrompt });
     }
+
+    const finalizeAssistantMessage = () => {
+      const finalContent = get().conversations.find(c => c.id === convId)?.messages
+        .find(m => m.id === assistantMsgId)?.content ?? '';
+      if (userId && finalContent) {
+        persistMessage({ ...assistantMsg, content: finalContent }, convId!, userId);
+        persistConversationUpdate(convId!, { updated_at: new Date().toISOString() });
+      }
+    };
 
     try {
       await api.streamChat(apiMessages, {
@@ -204,6 +279,7 @@ export const useChatStore = create<ChatState>((set, get) => ({
             msgs.map(m => m.id === assistantMsgId ? { ...m, isStreaming: false } : m)
           );
           set({ isLoading: false, streamingMessageId: null });
+          finalizeAssistantMessage();
         },
         onError: (err) => {
           updateConvMessages(msgs =>
@@ -212,6 +288,7 @@ export const useChatStore = create<ChatState>((set, get) => ({
               : m)
           );
           set({ isLoading: false, streamingMessageId: null });
+          finalizeAssistantMessage();
         },
       });
     } catch (err: any) {
@@ -221,6 +298,7 @@ export const useChatStore = create<ChatState>((set, get) => ({
           : m)
       );
       set({ isLoading: false, streamingMessageId: null });
+      finalizeAssistantMessage();
     }
   },
 
@@ -229,7 +307,13 @@ export const useChatStore = create<ChatState>((set, get) => ({
     const project: Project = { id, name: name.trim() || 'Novo projeto', createdAt: Date.now() };
     const updated = [...get().projects, project];
     set({ projects: updated });
-    saveProjects(updated);
+
+    const userId = currentUserId();
+    if (userId) {
+      supabase.from('projects').insert({ id, user_id: userId, name: project.name }).then(({ error }) => {
+        if (error) console.error('[supabase] falha ao criar projeto:', error.message);
+      });
+    }
     return id;
   },
 
@@ -239,8 +323,9 @@ export const useChatStore = create<ChatState>((set, get) => ({
       c.projectId === id ? { ...c, projectId: null } : c
     );
     set({ projects: updatedProjects, conversations: updatedConvs });
-    saveProjects(updatedProjects);
-    saveConversations(updatedConvs);
+    supabase.from('projects').delete().eq('id', id).then(({ error }) => {
+      if (error) console.error('[supabase] falha ao excluir projeto:', error.message);
+    });
   },
 
   setConversationProject: (convId: string, projectId: string | null) => {
@@ -248,6 +333,6 @@ export const useChatStore = create<ChatState>((set, get) => ({
       c.id === convId ? { ...c, projectId } : c
     );
     set({ conversations: updated });
-    saveConversations(updated);
+    persistConversationUpdate(convId, { project_id: projectId });
   },
 }));

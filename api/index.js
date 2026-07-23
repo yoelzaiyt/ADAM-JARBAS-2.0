@@ -173,69 +173,41 @@ function readBody(req) {
 }
 
 // ============================================================
-// AUTH - Simple in-memory user store (serverless)
+// AUTH - validado contra o Supabase Auth (GoTrue)
+// ------------------------------------------------------------
+// O login/registro agora acontece direto no frontend via
+// @supabase/supabase-js (supabase.auth.signUp/signInWithPassword).
+// Aqui só verificamos se o token que chegou é uma sessão válida,
+// perguntando pro próprio Supabase - sem precisar guardar segredo
+// nenhum de JWT nem manter usuários em memória.
 // ============================================================
-const users = new Map();
+const SUPABASE_URL = process.env.SUPABASE_URL || '';
+const SUPABASE_ANON_KEY = process.env.SUPABASE_ANON_KEY || '';
 
-// ------------------------------------------------------------
-// Stateless signed tokens (HMAC-SHA256). Verifiable across cold
-// starts without needing the in-memory `users` Map, since that
-// Map is wiped whenever the serverless instance recycles.
-// ------------------------------------------------------------
-const JWT_SECRET = process.env.JWT_SECRET || 'dev-secret-change-me';
-
-function base64url(input) {
-  return Buffer.from(input).toString('base64').replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '');
-}
-
-function base64urlDecode(input) {
-  const padded = input.replace(/-/g, '+').replace(/_/g, '/');
-  return Buffer.from(padded, 'base64').toString('utf8');
-}
-
-function generateToken(payload) {
-  const header = base64url(JSON.stringify({ alg: 'HS256', typ: 'JWT' }));
-  const body = base64url(JSON.stringify({ ...payload, iat: Date.now() }));
-  const signature = crypto.createHmac('sha256', JWT_SECRET).update(`${header}.${body}`).digest('base64url');
-  return `${header}.${body}.${signature}`;
-}
-
-function verifyToken(token) {
-  if (!token) return null;
-  const parts = token.split('.');
-  if (parts.length !== 3) return null;
-  const [header, body, signature] = parts;
-  const expected = crypto.createHmac('sha256', JWT_SECRET).update(`${header}.${body}`).digest('base64url');
-  const a = Buffer.from(signature);
-  const b = Buffer.from(expected);
-  if (a.length !== b.length || !crypto.timingSafeEqual(a, b)) return null;
-  try {
-    return JSON.parse(base64urlDecode(body));
-  } catch {
-    return null;
-  }
-}
-
-function requireAuth(req) {
+async function requireAuth(req) {
   const header = req.headers['authorization'] || '';
   const token = header.startsWith('Bearer ') ? header.slice(7) : null;
-  const payload = verifyToken(token);
-  if (!payload) {
+
+  if (!token || !SUPABASE_URL || !SUPABASE_ANON_KEY) {
     const err = new Error('Não autenticado');
     err.statusCode = 401;
     throw err;
   }
-  return payload;
-}
 
-function hashPassword(pw) {
-  let hash = 0;
-  for (let i = 0; i < pw.length; i++) {
-    const char = pw.charCodeAt(i);
-    hash = ((hash << 5) - hash) + char;
-    hash |= 0;
+  const res = await fetch(`${SUPABASE_URL}/auth/v1/user`, {
+    headers: {
+      Authorization: `Bearer ${token}`,
+      apikey: SUPABASE_ANON_KEY,
+    },
+  });
+
+  if (!res.ok) {
+    const err = new Error('Não autenticado');
+    err.statusCode = 401;
+    throw err;
   }
-  return 'h_' + Math.abs(hash).toString(36);
+
+  return res.json();
 }
 
 // ============================================================
@@ -268,48 +240,9 @@ export default async function handler(req, res) {
         platform: 'JARBAS 2.0 - Hermes Platform',
         providers: activeProviders,
         endpoints: [
-          '/health', '/api/v1/chat', '/api/v1/providers',
-          '/api/v1/auth/login', '/api/v1/auth/register', '/api/v1/images/generate',
+          '/health', '/api/v1/chat', '/api/v1/providers', '/api/v1/images/generate',
         ],
       });
-      return;
-    }
-
-    // Auth - Register
-    if (path === '/api/v1/auth/register' && req.method === 'POST') {
-      const body = await readBody(req);
-      const { email, password, name, tenantId } = body;
-      if (!email || !password) {
-        sendJSON(res, 400, { error: 'Email and password required' });
-        return;
-      }
-      if (users.has(email)) {
-        sendJSON(res, 409, { error: 'User already exists' });
-        return;
-      }
-      const user = { id: crypto.randomUUID(), email, name: name || email.split('@')[0], tenantId: tenantId || 'default' };
-      users.set(email, { ...user, passwordHash: hashPassword(password) });
-      const token = generateToken({ sub: user.id, email: user.email });
-      sendJSON(res, 200, { user, token: { accessToken: token, expiresIn: '7d' } });
-      return;
-    }
-
-    // Auth - Login
-    if (path === '/api/v1/auth/login' && req.method === 'POST') {
-      const body = await readBody(req);
-      const { email, password } = body;
-      if (!email || !password) {
-        sendJSON(res, 400, { error: 'Email and password required' });
-        return;
-      }
-      const stored = users.get(email);
-      if (!stored || stored.passwordHash !== hashPassword(password)) {
-        sendJSON(res, 401, { error: 'Invalid credentials' });
-        return;
-      }
-      const { passwordHash, ...user } = stored;
-      const token = generateToken({ sub: user.id, email: user.email });
-      sendJSON(res, 200, { user, token: { accessToken: token, expiresIn: '7d' } });
       return;
     }
 
@@ -330,7 +263,7 @@ export default async function handler(req, res) {
 
     // Chat completion
     if (path === '/api/v1/chat' && req.method === 'POST') {
-      requireAuth(req);
+      await requireAuth(req);
       const body = await readBody(req);
       const { messages, model, provider, temperature, maxTokens } = body;
 
@@ -354,7 +287,7 @@ export default async function handler(req, res) {
 
     // Image generation
     if (path === '/api/v1/images/generate' && req.method === 'POST') {
-      requireAuth(req);
+      await requireAuth(req);
       const body = await readBody(req);
       const { prompt, model, referenceImages } = body;
 

@@ -1,8 +1,14 @@
 import { create } from 'zustand';
 import type { AgentDefinition } from '../types';
+import { useAuthStore } from './authStore';
+import { supabase } from '../services/supabaseClient';
 
 function generateId(): string {
-  return Date.now().toString(36) + Math.random().toString(36).slice(2);
+  return crypto.randomUUID();
+}
+
+function currentUserId(): string | null {
+  return useAuthStore.getState().user?.id ?? null;
 }
 
 export const BUILT_IN_AGENTS: AgentDefinition[] = [
@@ -50,6 +56,8 @@ export const BUILT_IN_AGENTS: AgentDefinition[] = [
 
 interface AgentsState {
   customAgents: AgentDefinition[];
+  isHydrated: boolean;
+  hydrate: () => Promise<void>;
   createAgent: (input: {
     name: string;
     description: string;
@@ -61,25 +69,39 @@ interface AgentsState {
   getAgent: (id: string) => AgentDefinition | undefined;
 }
 
-const AGENTS_KEY = 'jarbas_custom_agents';
-
-function loadAgents(): AgentDefinition[] {
-  try {
-    const raw = localStorage.getItem(AGENTS_KEY);
-    return raw ? JSON.parse(raw) : [];
-  } catch {
-    return [];
-  }
-}
-
-function saveAgents(agents: AgentDefinition[]) {
-  try {
-    localStorage.setItem(AGENTS_KEY, JSON.stringify(agents));
-  } catch { /* quota exceeded */ }
+function rowToAgent(row: any): AgentDefinition {
+  return {
+    id: row.id,
+    name: row.name,
+    description: row.description ?? '',
+    systemPrompt: row.system_prompt,
+    skills: row.skills ?? [],
+    memoryEnabled: false,
+    maxIterations: 1,
+    provider: 'deepseek',
+    model: 'deepseek-chat',
+    temperature: 0.7,
+  };
 }
 
 export const useAgentsStore = create<AgentsState>((set, get) => ({
-  customAgents: loadAgents(),
+  customAgents: [],
+  isHydrated: false,
+
+  hydrate: async () => {
+    const userId = currentUserId();
+    if (!userId) return;
+    const { data, error } = await supabase
+      .from('agents')
+      .select('*')
+      .eq('user_id', userId)
+      .order('created_at', { ascending: true });
+    if (error) {
+      console.error('[supabase] falha ao carregar skills:', error.message);
+      return;
+    }
+    set({ customAgents: (data || []).map(rowToAgent), isHydrated: true });
+  },
 
   createAgent: ({ name, description, systemPrompt, skills }) => {
     const id = generateId();
@@ -97,20 +119,44 @@ export const useAgentsStore = create<AgentsState>((set, get) => ({
     };
     const updated = [...get().customAgents, agent];
     set({ customAgents: updated });
-    saveAgents(updated);
+
+    const userId = currentUserId();
+    if (userId) {
+      supabase.from('agents').insert({
+        id,
+        user_id: userId,
+        name: agent.name,
+        description: agent.description,
+        system_prompt: agent.systemPrompt,
+        skills: agent.skills,
+      }).then(({ error }) => {
+        if (error) console.error('[supabase] falha ao criar skill:', error.message);
+      });
+    }
     return id;
   },
 
   updateAgent: (id, updates) => {
     const updated = get().customAgents.map(a => a.id === id ? { ...a, ...updates } : a);
     set({ customAgents: updated });
-    saveAgents(updated);
+
+    supabase.from('agents').update({
+      ...(updates.name !== undefined ? { name: updates.name } : {}),
+      ...(updates.description !== undefined ? { description: updates.description } : {}),
+      ...(updates.systemPrompt !== undefined ? { system_prompt: updates.systemPrompt } : {}),
+      ...(updates.skills !== undefined ? { skills: updates.skills } : {}),
+      updated_at: new Date().toISOString(),
+    }).eq('id', id).then(({ error }) => {
+      if (error) console.error('[supabase] falha ao atualizar skill:', error.message);
+    });
   },
 
   deleteAgent: (id) => {
     const updated = get().customAgents.filter(a => a.id !== id);
     set({ customAgents: updated });
-    saveAgents(updated);
+    supabase.from('agents').delete().eq('id', id).then(({ error }) => {
+      if (error) console.error('[supabase] falha ao excluir skill:', error.message);
+    });
   },
 
   getAgent: (id) => {

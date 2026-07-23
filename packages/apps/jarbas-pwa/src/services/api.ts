@@ -1,13 +1,16 @@
+import { supabase } from './supabaseClient';
+
 const API_BASE = '/api/v1';
 
 class ApiClient {
-  private getToken(): string | null {
-    return localStorage.getItem('jarbas_token');
+  private async getToken(): Promise<string | null> {
+    const { data } = await supabase.auth.getSession();
+    return data.session?.access_token ?? null;
   }
 
-  private headers(extra?: Record<string, string>): Record<string, string> {
+  private async headers(extra?: Record<string, string>): Promise<Record<string, string>> {
     const h: Record<string, string> = { 'Content-Type': 'application/json', ...extra };
-    const token = this.getToken();
+    const token = await this.getToken();
     if (token) h['Authorization'] = `Bearer ${token}`;
     return h;
   }
@@ -15,7 +18,7 @@ class ApiClient {
   async post<T>(path: string, body?: unknown): Promise<T> {
     const res = await fetch(`${API_BASE}${path}`, {
       method: 'POST',
-      headers: this.headers(),
+      headers: await this.headers(),
       body: body ? JSON.stringify(body) : undefined,
     });
     if (!res.ok) {
@@ -26,7 +29,7 @@ class ApiClient {
   }
 
   async get<T>(path: string): Promise<T> {
-    const res = await fetch(`${API_BASE}${path}`, { headers: this.headers() });
+    const res = await fetch(`${API_BASE}${path}`, { headers: await this.headers() });
     if (!res.ok) {
       const err = await res.json().catch(() => ({ error: res.statusText }));
       throw new Error(err.error || err.message || `HTTP ${res.status}`);
@@ -53,7 +56,7 @@ class ApiClient {
   ): Promise<void> {
     const res = await fetch(`${API_BASE}/chat`, {
       method: 'POST',
-      headers: this.headers(),
+      headers: await this.headers(),
       body: JSON.stringify({
         messages,
         stream: true,

@@ -1,6 +1,7 @@
 import { create } from 'zustand';
-import type { User, AuthToken } from '../types';
-import { api } from '../services/api';
+import type { User } from '../types';
+import { supabase } from '../services/supabaseClient';
+import type { Session } from '@supabase/supabase-js';
 
 interface AuthState {
   user: User | null;
@@ -15,58 +16,78 @@ interface AuthState {
   initFromStorage: () => void;
 }
 
-export const useAuthStore = create<AuthState>((set) => ({
-  user: null,
-  token: localStorage.getItem('jarbas_token'),
-  isAuthenticated: !!localStorage.getItem('jarbas_token'),
-  isLoading: false,
-  error: null,
+function toUser(session: Session): User {
+  const { user: supaUser } = session;
+  return {
+    id: supaUser.id,
+    email: supaUser.email ?? '',
+    name: (supaUser.user_metadata?.name as string) || supaUser.email?.split('@')[0] || 'Usuário',
+    tenantId: (supaUser.user_metadata?.tenantId as string) || 'default',
+    role: 'admin',
+    createdAt: supaUser.created_at,
+  };
+}
 
-  initFromStorage: () => {
-    const token = localStorage.getItem('jarbas_token');
-    const userStr = localStorage.getItem('jarbas_user');
-    if (token && userStr) {
-      try {
-        const user = JSON.parse(userStr);
-        set({ token, user, isAuthenticated: true });
-      } catch {
-        localStorage.removeItem('jarbas_token');
-        localStorage.removeItem('jarbas_user');
+export const useAuthStore = create<AuthState>((set) => {
+  supabase.auth.onAuthStateChange((_event, session) => {
+    if (session) {
+      set({ user: toUser(session), token: session.access_token, isAuthenticated: true });
+    } else {
+      set({ user: null, token: null, isAuthenticated: false });
+    }
+  });
+
+  return {
+    user: null,
+    token: null,
+    isAuthenticated: false,
+    isLoading: false,
+    error: null,
+
+    initFromStorage: () => {
+      supabase.auth.getSession().then(({ data }) => {
+        if (data.session) {
+          set({ user: toUser(data.session), token: data.session.access_token, isAuthenticated: true });
+        }
+      });
+    },
+
+    login: async (email, password) => {
+      set({ isLoading: true, error: null });
+      const { data, error } = await supabase.auth.signInWithPassword({ email, password });
+      if (error || !data.session) {
+        set({ error: error?.message || 'Credenciais inválidas', isLoading: false });
+        throw error || new Error('Credenciais inválidas');
       }
-    }
-  },
+      set({ user: toUser(data.session), token: data.session.access_token, isAuthenticated: true, isLoading: false });
+    },
 
-  login: async (email, password) => {
-    set({ isLoading: true, error: null });
-    try {
-      const res = await api.post<{ user: User; token: AuthToken }>('/auth/login', { email, password });
-      localStorage.setItem('jarbas_token', res.token.accessToken);
-      localStorage.setItem('jarbas_user', JSON.stringify(res.user));
-      set({ user: res.user, token: res.token.accessToken, isAuthenticated: true, isLoading: false });
-    } catch (err: any) {
-      set({ error: err.message, isLoading: false });
-      throw err;
-    }
-  },
+    register: async (email, password, name, tenantId) => {
+      set({ isLoading: true, error: null });
+      const { data, error } = await supabase.auth.signUp({
+        email,
+        password,
+        options: { data: { name, tenantId } },
+      });
+      if (error) {
+        set({ error: error.message, isLoading: false });
+        throw error;
+      }
+      if (!data.session) {
+        set({
+          isLoading: false,
+          error: 'Conta criada! Verifique seu email para confirmar antes de entrar.',
+        });
+        return;
+      }
+      set({ user: toUser(data.session), token: data.session.access_token, isAuthenticated: true, isLoading: false });
+    },
 
-  register: async (email, password, name, tenantId) => {
-    set({ isLoading: true, error: null });
-    try {
-      const res = await api.post<{ user: User; token: AuthToken }>('/auth/register', { email, password, name, tenantId });
-      localStorage.setItem('jarbas_token', res.token.accessToken);
-      localStorage.setItem('jarbas_user', JSON.stringify(res.user));
-      set({ user: res.user, token: res.token.accessToken, isAuthenticated: true, isLoading: false });
-    } catch (err: any) {
-      set({ error: err.message, isLoading: false });
-      throw err;
-    }
-  },
+    logout: () => {
+      supabase.auth.signOut();
+      set({ user: null, token: null, isAuthenticated: false });
+    },
 
-  logout: () => {
-    localStorage.removeItem('jarbas_token');
-    localStorage.removeItem('jarbas_user');
-    set({ user: null, token: null, isAuthenticated: false });
-  },
-
-  clearError: () => set({ error: null }),
-}));
+    clearError: () => set({ error: null }),
+  };
+});
