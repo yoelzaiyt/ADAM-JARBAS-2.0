@@ -1,0 +1,39 @@
+{
+  "name": "@jarbas/api-gateway",
+  "version": "1.0.0",
+  "private": true,
+  "type": "module",
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "scripts": {
+    "build": "tsc",
+    "dev": "tsx watch src/index.ts",
+    "start": "node dist/index.js"
+  },
+  "dependencies": {
+    "@jarbas/ai-registry": "workspace:*",
+    "@jarbas/agent-manager": "workspace:*",
+    "@jarbas/analytics-engine": "workspace:*",
+    "@jarbas/auth-service": "workspace:*",
+    "@jarbas/config": "workspace:*",
+    "@jarbas/cost-optimizer": "workspace:*",
+    "@jarbas/hermes-router": "workspace:*",
+    "@jarbas/memory-manager": "workspace:*",
+    "@jarbas/prompt-engine": "workspace:*",
+    "@jarbas/skill-manager": "workspace:*",
+    "@jarbas/supabase-client": "workspace:*",
+    "@jarbas/types": "workspace:*",
+    "@jarbas/utils": "workspace:*",
+    "cors": "^2.8.5",
+    "express": "^4.19.0",
+    "express-rate-limit": "^7.1.5",
+    "helmet": "^7.1.0"
+  },
+  "devDependencies": {
+    "@types/cors": "^2.8.17",
+    "@types/express": "^4.17.21",
+    "tsx": "^4.7.0",
+    "typescript": "^5.4.0"
+  }
+}
+

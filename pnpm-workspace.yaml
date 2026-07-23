@@ -1,0 +1,8 @@
+packages:
+  - "packages/core/*"
+  - "packages/shared/*"
+  - "packages/services/*"
+  - "packages/apps/*"
+  - "packages/infrastructure/*"
+  - "packages/integration/*"
+  - "packages/business/*"
