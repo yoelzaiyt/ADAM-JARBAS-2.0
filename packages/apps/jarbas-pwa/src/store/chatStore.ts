@@ -43,6 +43,7 @@ const DEFAULT_MODELS: Record<AIProviderName, string> = {
   opencode: 'opencode-default',
   zhipuai: 'glm-4-flash',
   hermes: 'Hermes-3-Llama-3.1-405B-FP8',
+  qwen: 'qwen-plus',
 };
 
 const CODEX_SYSTEM_PROMPT = 'Você é o Jarbas em modo Codex: um assistente de programação. ' +

@@ -55,6 +55,13 @@ const PROVIDERS: { name: AIProviderName; label: string; icon: typeof Cpu; color:
     color: 'from-teal-500 to-cyan-500',
     models: ['glm-4-flash', 'glm-4-plus', 'glm-4'],
   },
+  {
+    name: 'qwen',
+    label: 'Qwen (Alibaba Cloud)',
+    icon: Cpu,
+    color: 'from-orange-500 to-red-500',
+    models: ['qwen-plus', 'qwen-turbo', 'qwen-max'],
+  },
 ];
 
 export function ProviderSelector({ selectedProvider, selectedModel, onSelect, onClose }: ProviderSelectorProps) {

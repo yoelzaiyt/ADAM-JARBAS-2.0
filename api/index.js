@@ -30,6 +30,11 @@ const PROVIDERS = {
     apiKey: process.env.ZHIPUAI_API_KEY || '',
     models: ['glm-4-flash', 'glm-4-plus'],
   },
+  qwen: {
+    baseUrl: 'https://ws-2251skz0kpf1ampe.ap-southeast-1.maas.aliyuncs.com/compatible-mode/v1',
+    apiKey: process.env.QWEN_API_KEY || '',
+    models: ['qwen-plus', 'qwen-turbo', 'qwen-max'],
+  },
 };
 
 // ============================================================
@@ -138,7 +143,7 @@ function selectProvider(preferred) {
   if (preferred && PROVIDERS[preferred] && PROVIDERS[preferred].apiKey) {
     return preferred;
   }
-  for (const name of ['hermes', 'deepseek', 'openrouter', 'nvidia', 'zhipuai']) {
+  for (const name of ['hermes', 'deepseek', 'openrouter', 'nvidia', 'zhipuai', 'qwen']) {
     if (PROVIDERS[name].apiKey) return name;
   }
   throw new Error('No AI providers configured with API keys');

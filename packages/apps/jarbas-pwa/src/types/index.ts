@@ -1,4 +1,4 @@
-export type AIProviderName = 'openrouter' | 'deepseek' | 'nvidia' | 'ollama' | 'opencode' | 'zhipuai' | 'hermes';
+export type AIProviderName = 'openrouter' | 'deepseek' | 'nvidia' | 'ollama' | 'opencode' | 'zhipuai' | 'hermes' | 'qwen';
 
 export interface ChatMessage {
   id: string;
